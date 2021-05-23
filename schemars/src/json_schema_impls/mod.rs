@@ -56,8 +56,8 @@ mod either;
 mod ffi;
 #[cfg(feature = "indexmap")]
 mod indexmap;
-#[cfg(feature = "language-tag")]
-mod language_tag;
+#[cfg(feature = "language-tags")]
+mod language_tags;
 mod maps;
 mod nonzero_signed;
 mod nonzero_unsigned;

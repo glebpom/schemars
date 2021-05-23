@@ -1,7 +1,7 @@
 use crate::gen::SchemaGenerator;
 use crate::schema::*;
 use crate::JsonSchema;
-use language_tag::LanguageTag;
+use language_tags::LanguageTag;
 
 impl JsonSchema for LanguageTag {
     no_ref_schema!();
