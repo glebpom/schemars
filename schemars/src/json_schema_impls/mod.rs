@@ -46,6 +46,8 @@ mod array;
 mod arrayvec;
 #[cfg(std_atomic)]
 mod atomic;
+#[cfg(feature = "bytes")]
+mod bytes;
 #[cfg(feature = "chrono")]
 mod chrono;
 mod core;
@@ -58,10 +60,10 @@ mod maps;
 mod nonzero_signed;
 mod nonzero_unsigned;
 mod primitives;
-mod sequences;
-mod serdejson;
 #[cfg(feature = "semver")]
 mod semver;
+mod sequences;
+mod serdejson;
 #[cfg(feature = "smallvec")]
 mod smallvec;
 #[cfg(feature = "smol_str")]
@@ -70,6 +72,8 @@ mod time;
 mod tuple;
 #[cfg(feature = "ulid")]
 mod ulid;
+#[cfg(feature = "url")]
+mod url;
 #[cfg(feature = "uuid")]
 mod uuid;
 mod wrapper;

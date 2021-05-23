@@ -13,62 +13,79 @@ mod schema_exprs;
 
 use ast::*;
 use proc_macro2::TokenStream;
+use syn::spanned::Spanned;
 
 #[proc_macro_derive(JsonSchema, attributes(schemars, serde))]
 pub fn derive_json_schema_wrapper(input: proc_macro::TokenStream) -> proc_macro::TokenStream {
     let input = parse_macro_input!(input as syn::DeriveInput);
-    derive_json_schema(input).into()
+    derive_json_schema(input, false)
+        .unwrap_or_else(compile_error)
+        .into()
 }
 
-fn derive_json_schema(mut input: syn::DeriveInput) -> TokenStream {
+#[proc_macro_derive(JsonSchema_repr, attributes(schemars, serde))]
+pub fn derive_json_schema_repr_wrapper(input: proc_macro::TokenStream) -> proc_macro::TokenStream {
+    let input = parse_macro_input!(input as syn::DeriveInput);
+    derive_json_schema(input, true)
+        .unwrap_or_else(compile_error)
+        .into()
+}
+
+fn derive_json_schema(
+    mut input: syn::DeriveInput,
+    repr: bool,
+) -> Result<TokenStream, Vec<syn::Error>> {
     add_trait_bounds(&mut input.generics);
 
-    if let Err(e) = attr::process_serde_attrs(&mut input) {
-        return compile_error(&e);
-    }
+    attr::process_serde_attrs(&mut input)?;
 
-    let cont = match Container::from_ast(&input) {
-        Ok(c) => c,
-        Err(e) => return compile_error(&e),
-    };
+    let cont = Container::from_ast(&input)?;
+    let crate_alias = cont.attrs.crate_name.as_ref().map(|path| {
+        quote_spanned! {path.span()=>
+            use #path as schemars;
+        }
+    });
 
     let type_name = &cont.ident;
     let (impl_generics, ty_generics, where_clause) = cont.generics.split_for_impl();
 
     if let Some(transparent_field) = cont.transparent_field() {
         let (ty, type_def) = schema_exprs::type_for_schema(transparent_field, 0);
-        return quote! {
-            #[automatically_derived]
-            impl #impl_generics schemars::JsonSchema for #type_name #ty_generics #where_clause {
+        return Ok(quote! {
+            const _: () = {
+                #crate_alias
                 #type_def
 
-                fn is_referenceable() -> bool {
-                    <#ty as schemars::JsonSchema>::is_referenceable()
-                }
+                #[automatically_derived]
+                impl #impl_generics schemars::JsonSchema for #type_name #ty_generics #where_clause {
+                    fn is_referenceable() -> bool {
+                        <#ty as schemars::JsonSchema>::is_referenceable()
+                    }
 
-                fn schema_name() -> std::string::String {
-                    <#ty as schemars::JsonSchema>::schema_name()
-                }
+                    fn schema_name() -> std::string::String {
+                        <#ty as schemars::JsonSchema>::schema_name()
+                    }
 
-                fn json_schema(gen: &mut schemars::gen::SchemaGenerator) -> schemars::schema::Schema {
-                    <#ty as schemars::JsonSchema>::json_schema(gen)
-                }
+                    fn json_schema(gen: &mut schemars::gen::SchemaGenerator) -> schemars::schema::Schema {
+                        <#ty as schemars::JsonSchema>::json_schema(gen)
+                    }
 
-                fn json_schema_for_flatten(gen: &mut schemars::gen::SchemaGenerator) -> schemars::schema::Schema {
-                    <#ty as schemars::JsonSchema>::json_schema_for_flatten(gen)
-                }
+                    fn json_schema_for_flatten(gen: &mut schemars::gen::SchemaGenerator) -> schemars::schema::Schema {
+                        <#ty as schemars::JsonSchema>::json_schema_for_flatten(gen)
+                    }
 
-                fn add_schema_as_property(
-                    gen: &mut schemars::gen::SchemaGenerator,
-                    parent: &mut schemars::schema::SchemaObject,
-                    name: String,
-                    metadata: Option<schemars::schema::Metadata>,
-                    required: bool,
-                ) {
-                    <#ty as schemars::JsonSchema>::add_schema_as_property(gen, parent, name, metadata, required)
-                }
+                    fn add_schema_as_property(
+                        gen: &mut schemars::gen::SchemaGenerator,
+                        parent: &mut schemars::schema::SchemaObject,
+                        name: String,
+                        metadata: Option<schemars::schema::Metadata>,
+                        required: bool,
+                    ) {
+                        <#ty as schemars::JsonSchema>::add_schema_as_property(gen, parent, name, metadata, required)
+                    }
+                };
             };
-        };
+        });
     }
 
     let mut schema_base_name = cont.name();
@@ -104,21 +121,29 @@ fn derive_json_schema(mut input: syn::DeriveInput) -> TokenStream {
         }
     };
 
-    let schema_expr = schema_exprs::expr_for_container(&cont);
+    let schema_expr = if repr {
+        schema_exprs::expr_for_repr(&cont).map_err(|e| vec![e])?
+    } else {
+        schema_exprs::expr_for_container(&cont)
+    };
 
-    quote! {
-        #[automatically_derived]
-        #[allow(unused_braces)]
-        impl #impl_generics schemars::JsonSchema for #type_name #ty_generics #where_clause {
-            fn schema_name() -> std::string::String {
-                #schema_name
-            }
+    Ok(quote! {
+        const _: () = {
+            #crate_alias
 
-            fn json_schema(gen: &mut schemars::gen::SchemaGenerator) -> schemars::schema::Schema {
-                #schema_expr
-            }
+            #[automatically_derived]
+            #[allow(unused_braces)]
+            impl #impl_generics schemars::JsonSchema for #type_name #ty_generics #where_clause {
+                fn schema_name() -> std::string::String {
+                    #schema_name
+                }
+
+                fn json_schema(gen: &mut schemars::gen::SchemaGenerator) -> schemars::schema::Schema {
+                    #schema_expr
+                }
+            };
         };
-    }
+    })
 }
 
 fn add_trait_bounds(generics: &mut syn::Generics) {
@@ -129,8 +154,8 @@ fn add_trait_bounds(generics: &mut syn::Generics) {
     }
 }
 
-fn compile_error<'a>(errors: impl IntoIterator<Item = &'a syn::Error>) -> TokenStream {
-    let compile_errors = errors.into_iter().map(syn::Error::to_compile_error);
+fn compile_error(errors: Vec<syn::Error>) -> TokenStream {
+    let compile_errors = errors.iter().map(syn::Error::to_compile_error);
     quote! {
         #(#compile_errors)*
     }

@@ -1,5 +1,34 @@
 # Changelog
 
+## [0.8.3] - 2021-04-05
+### Added:
+- Support for `#[schemars(crate = "...")]` attribute to allow deriving JsonSchema when the schemars crate is aliased to a different name (https://github.com/GREsau/schemars/pull/55 / https://github.com/GREsau/schemars/pull/80)
+- Implement `JsonSchema` for `bytes::Bytes` and `bytes::BytesMut` (https://github.com/GREsau/schemars/pull/68)
+
+### Fixed:
+- Fix deriving JsonSchema on types defined inside macros (https://github.com/GREsau/schemars/issues/59 / https://github.com/GREsau/schemars/issues/66 / https://github.com/GREsau/schemars/pull/79)
+
+## [0.8.2] - 2021-03-27
+### Added:
+- Enable generating a schema from any serializable value using `schema_for_value!(...)` macro or `SchemaGenerator::root_schema_for_value()`/`SchemaGenerator::into_root_schema_for_value()` methods (https://github.com/GREsau/schemars/pull/75)
+- `#[derive(JsonSchema_repr)]` can be used on C-like enums for generating a serde_repr-compatible schema (https://github.com/GREsau/schemars/pull/76)
+- Implement `JsonSchema` for `url::Url` (https://github.com/GREsau/schemars/pull/63)
+
+## [0.8.1] - 2021-03-23
+### Added:
+- `SchemaGenerator::definitions_mut()` which returns a mutable reference to the generator's schema definitions
+- Implement `JsonSchema` for slices
+
+### Changed:
+- Minimum supported rust version is now 1.37.0
+- Deriving JsonSchema on enums now sets `additionalProperties` to false on generated schemas wherever serde doesn't accept unknown properties. This includes non-unit variants of externally tagged enums, and struct-style variants of all enums that have the `deny_unknown_fields` attribute.
+- Schemas for HashSet and BTreeSet now have `uniqueItems` set to true (https://github.com/GREsau/schemars/pull/64)
+
+### Fixed
+- Fix use of `#[serde(transparent)]` in combination with `#[schemars(with = ...)]` (https://github.com/GREsau/schemars/pull/67)
+- Fix clippy `field_reassign_with_default` warning in schemars_derive generated code in rust <1.51 (https://github.com/GREsau/schemars/pull/65)
+- Prevent stack overflow when using `inline_subschemas` with recursive types
+
 ## [0.8.0] - 2020-09-27
 ### Added:
 - `visit::Visitor`, a trait for updating a schema and all schemas it contains recursively. A `SchemaSettings` can now contain a list of visitors.
